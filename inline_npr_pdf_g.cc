@@ -224,13 +224,13 @@ namespace Chroma
 	  
 
 	multi2d<ColorMatrix> Ap(phases.numMom(),Nd);
-	LatticeComplex shift_phase;
+	Complex shift_phase;
 	for (int m=0; m < phases.numMom(); m++){
 		mom_serial.push_back((50+phases.numToMom(m)[0])+(50+phases.numToMom(m)[1])*100+(50+phases.numToMom(m)[2]) *10000+(50+phases.numToMom(m)[3])*1000000);
 		
 		for(int mu=0; mu<Nd; ++mu){
 			const Real twopi = 6.283185307179586476925286;
-			Real p_dot_x, shift_phase;
+			Real p_dot_x;
 			p_dot_x=phases.numToMom(m)[mu]*twopi/Layout::lattSize()[mu]/2.0;
 			shift_phase=cmplx(cos(p_dot_x),sin(p_dot_x));
 			Ap[m][mu] = shift_phase*sum(phases[m]*ai[mu]);
