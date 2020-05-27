@@ -216,9 +216,9 @@ namespace Chroma
 	  multi1d<LatticeColorMatrix> ai(Nd);
 	  for(int mu=0; mu<Nd; ++mu){
 		  trUmat[mu]=zero;
-		  for(int i=0; i<Nc; ++i))
+		  for(int i=0; i<Nc; ++i)
 			  trUmat[mu].elem(0,0) += 2.0/Nc*imag(trace(u[mu].elem(i,i)));
-		  for(int i=1; i<Nc; ++i)) trUmat[mu].elem(i,i)=trUmat[mu].elem(0,0);
+		  for(int i=1; i<Nc; ++i) trUmat[mu].elem(i,i)=trUmat[mu].elem(0,0);
 		  ai[mu]=1/(2*g0)*(u[mu]-adj(u[mu])-trUmat[mu]);
 	  }
 	  
@@ -228,7 +228,7 @@ namespace Chroma
 
 	multi2d<ColorMatrix> Ap(phases.numMom(),Nd);
 	multi1d<LatticeReal> shift_phase(phases.numMom());
-	for (int m=0; m < phases.numMom()); m++){
+	for (int m=0; m < phases.numMom(); m++){
 		mom_serial.push_back((50+phases.numToMom(m)[0])+(50+phases.numToMom(m)[1])*100+(50+phases.numToMom(m)[2]) *10000+(50+phases.numToMom(m)[3])*1000000);
 		
 		for(int mu=0; mu<Nd; ++mu){
