@@ -212,13 +212,10 @@ namespace Chroma
 	std::vector<int> mom_serial(phases.numMom());
 
 	  double g0=1.0;
-	  multi1d<LatticeColorMatrix> trUmat(Nd);
+	  LatticeColorMatrix trUmat;
 	  multi1d<LatticeColorMatrix> ai(Nd);
+	  trUmat=2.0/Nc*imag(trace(u[mu])));
 	  for(int mu=0; mu<Nd; ++mu){
-		  trUmat[mu]=zero;
-		  for(int i=0; i<Nc; ++i)
-			  trUmat[mu].elem().elem(0,0) += 2.0/Nc*imag(trace(u[mu])));
-		  for(int i=1; i<Nc; ++i) trUmat[mu].elem().elem(i,i)=trUmat[mu].elem().elem(0,0);
 		  ai[mu]=1/(2*g0)*(u[mu]-adj(u[mu])-trUmat[mu]);
 	  }
 	  
