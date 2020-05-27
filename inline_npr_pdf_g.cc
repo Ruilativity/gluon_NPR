@@ -223,7 +223,7 @@ namespace Chroma
 	  
 	  
 
-	multi2d<ColorMatrix> Ap(phases.numMom(),Nd);
+	multi2d<PColorMatrix> Ap(phases.numMom(),Nd);
 	multi1d<LatticeReal> shift_phase(phases.numMom());
 	for (int m=0; m < phases.numMom(); m++){
 		mom_serial.push_back((50+phases.numToMom(m)[0])+(50+phases.numToMom(m)[1])*100+(50+phases.numToMom(m)[2]) *10000+(50+phases.numToMom(m)[3])*1000000);
@@ -252,9 +252,9 @@ namespace Chroma
 		for(int ic2=0; ic2!=Nc; ic2++)
 		for(int ic1=0; ic1!=Nc; ic1++)
 		{
-			io_prop.data[data_index]=Ap[m][dir].elem().elem(ic1,ic2).real();
+			io_prop.data[data_index]=Ap[m][dir].elem(ic1,ic2).real();
 			data_index++;
-			io_prop.data[data_index]=Ap[m][dir].elem().elem(ic1,ic2).imag();
+			io_prop.data[data_index]=Ap[m][dir].elem(ic1,ic2).imag();
 			data_index++;
 		}
 		io_prop.save();
