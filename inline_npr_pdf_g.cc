@@ -252,9 +252,9 @@ namespace Chroma
 		for(int ic2=0; ic2!=Nc; ic2++)
 		for(int ic1=0; ic1!=Nc; ic1++)
 		{
-			io_prop.data[data_index]=Ap[m][dir].elem().elem(ic1,ic2).real();
+			io_prop.data[data_index]=Ap[m][dir].elem().elem().elem(ic1,ic2).real();
 			data_index++;
-			io_prop.data[data_index]=Ap[m][dir].elem().elem(ic1,ic2).imag();
+			io_prop.data[data_index]=Ap[m][dir].elem().elem().elem(ic1,ic2).imag();
 			data_index++;
 		}
 		io_prop.save();
