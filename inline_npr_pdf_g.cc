@@ -209,7 +209,7 @@ namespace Chroma
     MesPlq(xml_out, "Observables", u);
     
     // Make sure that the source location is irrelevant
-    SftMom phases(params.mom_list, Nd); // 4D fourier transform
+    SftMom phases(params.max_mom2, Nd); // 4D fourier transform
 	std::vector<int> mom_serial(phases.numMom());
 
 	  double g0=1.0;
@@ -228,7 +228,6 @@ namespace Chroma
 	  
 
 	multi2d<ColorMatrix> Ap(phases.numMom(),Nd);
-	multi2d<ColorMatrix> Apm(phases.numMom(),Nd);
 	multi1d<LatticeReal> shift_phase(phases.numMom());
 	for (int m=0; m < Ap.size(); m++){
 		mom_serial.push_back((50+phases.numToMom(m)[0])+(50+phases.numToMom(m)[1])*100+(50+phases.numToMom(m)[2]) *10000+(50+phases.numToMom(m)[3])*1000000);
@@ -239,7 +238,6 @@ namespace Chroma
 			p_dot_x=params.mom_list[m][mu]*twopi/Layout::lattSize()[mu]/2.0;
 			shift_phase=cmplx(cos(p_dot_x),sin(p_dot_x));
 			Ap[m][mu] = shift_phase*sum(phases[m]*ai[mu]);
-			Apm[m][mu] = sum(ai[mu]/phases[m])/shift_phase;
 		}
 	}
 
@@ -247,7 +245,6 @@ namespace Chroma
 	{
 		general_data_base io_prop;
 		sprintf(io_prop.name,"%s",params.filename);
-		io_prop.add_dimension(dim_operator,2) // for A(p) and A(-p)
 		io_prop.add_dimension(dim_momentum, mom_serial.size(),mom_serial.data());
 		io_prop.add_dimension(dim_direction, Nd);
 		io_prop.add_dimension(dim_temporary, 9);
@@ -262,16 +259,6 @@ namespace Chroma
 			io_prop.data[data_index]=Ap[m][mu].elem().elem(ic1,ic2).real();
 			data_index++;
 			io_prop.data[data_index]=Ap[m][mu].elem().elem(ic1,ic2).imag();
-			data_index++;
-		}
-		for(int m(0);m<mom_serial.size();m++)
-		for(int dir=0; dir< Nd; Nd++)
-		for(int ic2=0; ic2!=Nc; ic2++)
-		for(int ic1=0; ic1!=Nc; ic1++)
-		{
-			io_prop.data[data_index]=Apm[m][mu].elem().elem(ic1,ic2).real();
-			data_index++;
-			io_prop.data[data_index]=Apm[m][mu].elem().elem(ic1,ic2).imag();
 			data_index++;
 		}
 		io_prop.save();
