@@ -217,8 +217,8 @@ namespace Chroma
 	  for(int mu=0; mu<Nd; ++mu){
 		  trUmat[mu]=zero;
 		  for(int i=0; i<Nc; ++i)
-			  trUmat[mu].elem(0,0) += 2.0/Nc*imag(trace(u[mu].elem(i,i)));
-		  for(int i=1; i<Nc; ++i) trUmat[mu].elem(i,i)=trUmat[mu].elem(0,0);
+			  trUmat[mu].elem().elem(0,0) += 2.0/Nc*imag(traceColor(u[mu].elem(i,i)));
+		  for(int i=1; i<Nc; ++i) trUmat[mu].elem().elem(i,i)=trUmat[mu].elem().elem(0,0);
 		  ai[mu]=1/(2*g0)*(u[mu]-adj(u[mu])-trUmat[mu]);
 	  }
 	  
