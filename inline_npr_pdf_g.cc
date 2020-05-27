@@ -217,7 +217,7 @@ namespace Chroma
 	  for(int mu=0; mu<Nd; ++mu){
 		  trUmat[mu]=zero;
 		  for(int i=0; i<Nc; ++i)
-			  trUmat[mu].elem().elem(0,0) += 2.0/Nc*imag(traceColor(u[mu].elem(i,i)));
+			  trUmat[mu].elem().elem(0,0) += 2.0/Nc*imag(trace(u[mu])));
 		  for(int i=1; i<Nc; ++i) trUmat[mu].elem().elem(i,i)=trUmat[mu].elem().elem(0,0);
 		  ai[mu]=1/(2*g0)*(u[mu]-adj(u[mu])-trUmat[mu]);
 	  }
@@ -234,7 +234,7 @@ namespace Chroma
 		for(int mu=0; mu<Nd; ++mu){
 			const Real twopi = 6.283185307179586476925286;
 			Real p_dot_x, shift_phase;
-			p_dot_x=params.phases.numToMom(m)[mu]*twopi/Layout::lattSize()[mu]/2.0;
+			p_dot_x=phases.numToMom(m)[mu]*twopi/Layout::lattSize()[mu]/2.0;
 			shift_phase=cmplx(cos(p_dot_x),sin(p_dot_x));
 			Ap[m][mu] = shift_phase*sum(phases[m]*ai[mu]);
 		}
