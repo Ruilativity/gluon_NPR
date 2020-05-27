@@ -48,7 +48,7 @@ namespace Chroma
 
 
   //! NprPDF input
-  void read(XMLReader& xml, const std::string& path, InlineNprPDFParams::NamedObject_t& input)
+  void read(XMLReader& xml, const std::string& path, InlineGluonNprPDFParams::NamedObject_t& input)
   {
     XMLReader inputtop(xml, path);
 
@@ -62,7 +62,6 @@ namespace Chroma
 
     write(xml, "gauge_id", input.gauge_id);
     //write(xml, "source_id", input.source_id);
-    write(xml, "prop_id", input.prop_id);
 
     pop(xml);
   }
@@ -218,7 +217,7 @@ namespace Chroma
 	  for(int mu=0; mu<Nd; ++mu){
 		  trUmat[mu]=zero;
 		  for(int i=0; i<Nc; ++i))
-			  trUmat[mu].elem(0,0)+=2.0/Nc*imag(trace(u[mu].elem(i,i)));
+			  trUmat[mu].elem(0,0) += 2.0/Nc*imag(trace(u[mu].elem(i,i)));
 		  for(int i=1; i<Nc; ++i)) trUmat[mu].elem(i,i)=trUmat[mu].elem(0,0);
 		  ai[mu]=1/(2*g0)*(u[mu]-adj(u[mu])-trUmat[mu]);
 	  }
@@ -229,13 +228,13 @@ namespace Chroma
 
 	multi2d<ColorMatrix> Ap(phases.numMom(),Nd);
 	multi1d<LatticeReal> shift_phase(phases.numMom());
-	for (int m=0; m < Ap.size(); m++){
+	for (int m=0; m < phases.numMom()); m++){
 		mom_serial.push_back((50+phases.numToMom(m)[0])+(50+phases.numToMom(m)[1])*100+(50+phases.numToMom(m)[2]) *10000+(50+phases.numToMom(m)[3])*1000000);
 		
 		for(int mu=0; mu<Nd; ++mu){
 			const Real twopi = 6.283185307179586476925286;
 			Real p_dot_x, shift_phase;
-			p_dot_x=params.mom_list[m][mu]*twopi/Layout::lattSize()[mu]/2.0;
+			p_dot_x=params.phases.numToMom(m)[mu]*twopi/Layout::lattSize()[mu]/2.0;
 			shift_phase=cmplx(cos(p_dot_x),sin(p_dot_x));
 			Ap[m][mu] = shift_phase*sum(phases[m]*ai[mu]);
 		}
@@ -252,13 +251,13 @@ namespace Chroma
 		io_prop.initialize();
 		int data_index=0;
 		for(int m(0);m<mom_serial.size();m++)
-		for(int dir=0; dir< Nd; Nd++)
+		for(int dir=0; dir< Nd; ++dir)
 		for(int ic2=0; ic2!=Nc; ic2++)
 		for(int ic1=0; ic1!=Nc; ic1++)
 		{
-			io_prop.data[data_index]=Ap[m][mu].elem().elem(ic1,ic2).real();
+			io_prop.data[data_index]=Ap[m][dir].elem().elem(ic1,ic2).real();
 			data_index++;
-			io_prop.data[data_index]=Ap[m][mu].elem().elem(ic1,ic2).imag();
+			io_prop.data[data_index]=Ap[m][dir].elem().elem(ic1,ic2).imag();
 			data_index++;
 		}
 		io_prop.save();
