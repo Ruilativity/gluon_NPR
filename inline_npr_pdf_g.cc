@@ -224,7 +224,7 @@ namespace Chroma
 	  
 
 	multi2d<ColorMatrix> Ap(phases.numMom(),Nd);
-	multi1d<LatticeComplex> shift_phase(phases.numMom());
+	LatticeComplex shift_phase;
 	for (int m=0; m < phases.numMom(); m++){
 		mom_serial.push_back((50+phases.numToMom(m)[0])+(50+phases.numToMom(m)[1])*100+(50+phases.numToMom(m)[2]) *10000+(50+phases.numToMom(m)[3])*1000000);
 		
