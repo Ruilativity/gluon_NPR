@@ -214,8 +214,8 @@ namespace Chroma
 	  double g0=1.0;
 	  LatticeColorMatrix trUmat;
 	  multi1d<LatticeColorMatrix> ai(Nd);
-	  trUmat=2.0/Nc*imag(trace(u[mu])));
 	  for(int mu=0; mu<Nd; ++mu){
+		  trUmat=2.0/Nc*imag(trace(u[mu])));
 		  ai[mu]=1/(2*g0)*(u[mu]-adj(u[mu])-trUmat[mu]);
 	  }
 	  
