@@ -232,6 +232,7 @@ namespace Chroma
 	  
 
 	multi2d<ColorMatrix> Ap(phases.numMom(),Nd);
+	multi3d<Complex> Dp(phases.numMom(),Nd ,Nd);
 	Complex shift_phase;
 	for (int m=0; m < phases.numMom(); m++){
 QDPIO::cout << "p: "<< phases.numToMom(m)[0]<<phases.numToMom(m)[1]<<phases.numToMom(m)[2]<<phases.numToMom(m)[3] << std::endl;
@@ -245,27 +246,54 @@ QDPIO::cout << "p: "<< phases.numToMom(m)[0]<<phases.numToMom(m)[1]<<phases.numT
 			Ap[m][mu] = shift_phase*sum(phases[m]*ai[mu]);
 		}
 	}
+	for (int m=0; m < (1+phases.numMom())/2; m++){
+		for(int mu=0; mu<Nd; ++mu)
+			for(int nu=0; mu<Nd; ++nu){
+				Dp[m][mu][nu]=trace(Ap[m][mu]*Ap[phases.numMom()-m][nu]);
+	}
 
 	if(Layout::primaryNode())
 	{
-		general_data_base io_prop;
-		sprintf(io_prop.name,"%s",params.filename.c_str());
+		general_data_base io_ap;
+		sprintf(io_ap.name,"%s",(params.filename+"_ap.iog").c_str());
 		QDPIO::cout << "write file to" << params.filename << std::endl;
 		QDPIO::cout << "max q^2=" << params.max_mom2 << std::endl;
-		io_prop.add_dimension(dim_momentum, mom_serial.size(),mom_serial.data());
-		io_prop.add_dimension(dim_direction, Nd);
-		io_prop.add_dimension(dim_temporary, 9);
-		io_prop.add_dimension(dim_complex, 2);
-		io_prop.initialize();
+		io_ap.add_dimension(dim_momentum, mom_serial.size(),mom_serial.data());
+		io_ap.add_dimension(dim_direction, Nd);
+		io_ap.add_dimension(dim_temporary, 9);
+		io_ap.add_dimension(dim_complex, 2);
+		io_ap.initialize();
 		int data_index=0;
 		for(int m(0);m<mom_serial.size();m++)
 		for(int dir=0; dir< Nd; ++dir)
 		for(int ic2=0; ic2!=Nc; ic2++)
 		for(int ic1=0; ic1!=Nc; ic1++)
 		{
-			io_prop.data[data_index]=Ap[m][dir].elem().elem().elem(ic1,ic2).real();
+			io_ap.data[data_index]=Ap[m][dir].elem().elem().elem(ic1,ic2).real();
 			data_index++;
-			io_prop.data[data_index]=Ap[m][dir].elem().elem().elem(ic1,ic2).imag();
+			io_ap.data[data_index]=Ap[m][dir].elem().elem().elem(ic1,ic2).imag();
+			data_index++;
+		}
+		QDPIO::cout << "writing A(p) to" << io_ap.name << std::endl;
+		io_ap.save();
+		
+		general_data_base io_prop;
+		sprintf(io_prop.name,"%s",(params.filename+"_prop.iog").c_str());
+		QDPIO::cout << "write file to" << params.filename << std::endl;
+		QDPIO::cout << "max q^2=" << params.max_mom2 << std::endl;
+		io_prop.add_dimension(dim_momentum, (1+mom_serial.size())/2,mom_serial.data());
+		io_prop.add_dimension(dim_direction, Nd);
+		io_prop.add_dimension(dim_temporary, Nd);
+		io_prop.add_dimension(dim_complex, 2);
+		io_prop.initialize();
+		data_index=0;
+		for(int m(0); m<(1+mom_serial.size())/2;m++)
+		for(int dir=0; dir< Nd; ++dir)
+		for(int dir2=0; dir2<Nd; ++dir2)
+		{
+			io_prop.data[data_index]=Dp[m][dir][dir2].elem().elem().elem().real();
+			data_index++;
+			io_prop.data[data_index]=Dp[m][dir][dir2].elem().elem().elem().imag();
 			data_index++;
 		}
 		QDPIO::cout << "writing file to" << io_prop.name << std::endl;
