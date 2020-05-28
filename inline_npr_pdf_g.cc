@@ -12,7 +12,6 @@
 #include "meas/inline/make_xml_file.h"
 #include "io_general_class.h"
 #include "inline_npr_pdf_g.h"
-
 #include "meas/inline/io/named_objmap.h"
 
 namespace Chroma
@@ -208,7 +207,7 @@ namespace Chroma
     MesPlq(xml_out, "Observables", u);
     
     // Make sure that the source location is irrelevant
-    SftMom phases(params.max_mom2, Nd); // 4D fourier transform
+    SftMom phases(params.max_mom2, false,  -1); // 4D fourier transform
 	std::vector<int> mom_serial(phases.numMom());
 
 	  double g0=1.0;
@@ -216,23 +215,33 @@ namespace Chroma
 	  multi1d<LatticeColorMatrix> ai(Nd);
 	  for(int mu=0; mu<Nd; ++mu){
 		  trUmat=2.0/Nc*imag(trace(u[mu]));
-		  ai[mu]=1/(2*g0)*(u[mu]-adj(u[mu])-trUmat);
+		  ai[mu]=1/(2*g0)*(u[mu]-adj(u[mu])-(trUmat-adj(trUmat))/Nc)/cmplx(Real(0.0),Real(1.0));
 	  }
 	  
-	  
+	 multi1d<int> checkpoint(4);
+	  for(int mu=0; mu<Nd; ++mu) checkpoint[mu]=Layout::lattSize()[mu]/2;
+	  QDPIO::cout << "check A(x):("<< checkpoint[0] <<","<< checkpoint[1] <<","<< checkpoint[2] <<","<< checkpoint[3] <<")" <<  std::endl;
+	  for(int mu=0; mu<Nd; ++mu){
+		  QDPIO::cout << "A_"<< mu <<"(x):";
+		  for(int i=0; i<Nc; ++i)
+			  for(int j=0; j<Nc; ++j)
+				  QDPIO::cout<< peekSite(ai[mu],checkpoint).elem().elem().elem(i,j)<< "\t";
+		  QDPIO::cout<< std::endl;
+	  } 
 	  
 	  
 
 	multi2d<ColorMatrix> Ap(phases.numMom(),Nd);
 	Complex shift_phase;
 	for (int m=0; m < phases.numMom(); m++){
-		mom_serial.push_back((50+phases.numToMom(m)[0])+(50+phases.numToMom(m)[1])*100+(50+phases.numToMom(m)[2]) *10000+(50+phases.numToMom(m)[3])*1000000);
+QDPIO::cout << "p: "<< phases.numToMom(m)[0]<<phases.numToMom(m)[1]<<phases.numToMom(m)[2]<<phases.numToMom(m)[3] << std::endl;
+		mom_serial[m]=(50+phases.numToMom(m)[0])+(50+phases.numToMom(m)[1])*100+(50+phases.numToMom(m)[2]) *10000+(50+phases.numToMom(m)[3])*1000000;
 		
 		for(int mu=0; mu<Nd; ++mu){
 			const Real twopi = 6.283185307179586476925286;
 			Real p_dot_x;
 			p_dot_x=phases.numToMom(m)[mu]*twopi/Layout::lattSize()[mu]/2.0;
-			shift_phase=cmplx(cos(p_dot_x),sin(p_dot_x));
+			shift_phase=cmplx(cos(-p_dot_x),sin(-p_dot_x));
 			Ap[m][mu] = shift_phase*sum(phases[m]*ai[mu]);
 		}
 	}
@@ -240,7 +249,9 @@ namespace Chroma
 	if(Layout::primaryNode())
 	{
 		general_data_base io_prop;
-		sprintf(io_prop.name,"%s",params.filename);
+		sprintf(io_prop.name,"%s",params.filename.c_str());
+		QDPIO::cout << "write file to" << params.filename << std::endl;
+		QDPIO::cout << "max q^2=" << params.max_mom2 << std::endl;
 		io_prop.add_dimension(dim_momentum, mom_serial.size(),mom_serial.data());
 		io_prop.add_dimension(dim_direction, Nd);
 		io_prop.add_dimension(dim_temporary, 9);
@@ -257,6 +268,7 @@ namespace Chroma
 			io_prop.data[data_index]=Ap[m][dir].elem().elem().elem(ic1,ic2).imag();
 			data_index++;
 		}
+		QDPIO::cout << "writing file to" << io_prop.name << std::endl;
 		io_prop.save();
 	}
    
