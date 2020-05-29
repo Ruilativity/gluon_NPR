@@ -215,7 +215,7 @@ namespace Chroma
 	  LatticeColorMatrix trUmat;
 	  multi1d<LatticeColorMatrix> ai(Nd);
 	  for(int mu=0; mu<Nd; ++mu){
-		  trUmat=2.0/Nc*imag(trace(u[mu]));
+		  trUmat=2.0/Nc*trace(u[mu]);
 		  ai[mu]=1/(2*g0)*(u[mu]-adj(u[mu])-(trUmat-adj(trUmat))/Nc)/cmplx(Real(0.0),Real(1.0));
 	  }
 	  
@@ -235,10 +235,9 @@ namespace Chroma
 	  
 
 	multi2d<ColorMatrix> Ap(phases.numMom(),Nd);
-	multi3d<Complex> Dp(phases.numMom(),Nd ,Nd);
+	multi4d<double> Dp((phases.numMom()+1)/2,Nd ,Nd,2);
 	Complex shift_phase;
 	for (int m=0; m < phases.numMom(); m++){
-QDPIO::cout << "p: ("<< -phases.numToMom(m)[0]<<","<<-phases.numToMom(m)[1]<<","<<-phases.numToMom(m)[2]<<","<<-phases.numToMom(m)[3] <<")"<< std::endl;
 		mom_serial[m]=(50-phases.numToMom(m)[0])+(50-phases.numToMom(m)[1])*100+(50-phases.numToMom(m)[2]) *10000+(50-phases.numToMom(m)[3])*1000000;
 		
 		for(int mu=0; mu<Nd; ++mu){
@@ -247,13 +246,19 @@ QDPIO::cout << "p: ("<< -phases.numToMom(m)[0]<<","<<-phases.numToMom(m)[1]<<","
 			p_dot_x=phases.numToMom(m)[mu]*twopi/Layout::lattSize()[mu]/2.0;
 			shift_phase=cmplx(cos(p_dot_x),sin(p_dot_x));
 			Ap[m][mu] = shift_phase*sum(phases[m]*ai[mu]);
-//QDPIO::cout << "phase at (1,1,1,1): " << (shift_phase*peekSite(phases[m],checkpoint))<< std::endl;
 		}
 	}
 	for (int m=0; m < (1+phases.numMom())/2; m++){
 		for(int mu=0; mu<Nd; ++mu)
-			for(int nu=0; mu<Nd; ++nu)
-				Dp[m][mu][nu]=trace(Ap[m][mu]*Ap[phases.numMom()-m][nu]);
+			for(int nu=0; nu<Nd; ++nu){
+				Dp[m][mu][nu][0]=0.;
+				Dp[m][mu][nu][1]=0.;
+				for(int i=0; i<Nc; ++i)
+					for(int j=0; j<Nc; ++j){
+						Dp[m][mu][nu][0]+=(Ap[m][mu].elem().elem().elem(i,j).real()*Ap[phases.numMom()-m-1][nu].elem().elem().elem(j,i).real()-Ap[m][mu].elem().elem().elem(i,j).imag()*Ap[phases.numMom()-m-1][nu].elem().elem().elem(j,i).imag());
+                                		Dp[m][mu][nu][1]+=(Ap[m][mu].elem().elem().elem(i,j).imag()*Ap[phases.numMom()-m-1][nu].elem().elem().elem(j,i).real()+Ap[m][mu].elem().elem().elem(i,j).real()*Ap[phases.numMom()-m-1][nu].elem().elem().elem(j,i).imag());
+					}
+			}
 	}
 
 	if(Layout::primaryNode())
@@ -295,9 +300,9 @@ QDPIO::cout << "p: ("<< -phases.numToMom(m)[0]<<","<<-phases.numToMom(m)[1]<<","
 		for(int dir=0; dir< Nd; ++dir)
 		for(int dir2=0; dir2<Nd; ++dir2)
 		{
-			io_prop.data[data_index]=Dp[m][dir][dir2].elem().elem().elem().real();
+			io_prop.data[data_index]=Dp[m][dir][dir2][0];
 			data_index++;
-			io_prop.data[data_index]=Dp[m][dir][dir2].elem().elem().elem().imag();
+			io_prop.data[data_index]=Dp[m][dir][dir2][1];
 			data_index++;
 		}
 		QDPIO::cout << "writing file to" << io_prop.name << std::endl;
