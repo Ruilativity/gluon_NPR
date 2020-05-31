@@ -82,6 +82,9 @@ namespace Chroma
 
        // Read in the output npr/source configuration info
       read(paramtop, "max_mom2", max_mom2);
+		
+	if (paramtop.count("lmax") == 1) read(paramtop, "lmax", lmax);
+	else lmax=-1;
 
       read(paramtop, "filename", filename);
 
@@ -108,6 +111,7 @@ namespace Chroma
     push(xml_out, path);
     
     QDP::write(xml_out, "filename", filename);
+    QDP::write(xml_out, "lmax", lmax);
     QDP::write(xml_out, "max_mom2", max_mom2);
     Chroma::write(xml_out, "NamedObject", named_obj);
 
@@ -261,11 +265,68 @@ namespace Chroma
 			}
 	}
 
+	  
+	  Double w_plaq, s_plaq, t_plaq, link;
+      multi2d<Double> plane_plaq;
+	  MesPlq(u, w_plaq, s_plaq, t_plaq, plane_plaq, link);
+	  multi2d<LatticeColorMatrix> plane_plaq_matrix;
+	  multi1d<Double> gluon_o;
+	  
+	  if(params.lmax>=0){
+	  plane_plaq_matrix.resize(Nd,Nd);
+	  
+	  for(int mu=1; mu < Nd; ++mu)
+	  {
+		  for(int nu=0; nu < mu; ++nu)
+		  {
+			  plane_plaq_matrix[mu][nu]=u[mu]*shift(u[nu],FORWARD,mu)*adj(shift(u[mu],FORWARD,nu))*adj(u[nu]);
+			  plane_plaq_matrix[nu][mu]=adj(plane_plaq_matrix[mu][nu]);
+		  }
+	  }
+	  multi2d<LatticeColorMatrix> FF,FF00,FF01,FF10,FF11;
+	  FF.resize(Nd,Nd);
+	  FF00.resize(Nd,Nd);
+	  FF01.resize(Nd,Nd);
+	  FF10.resize(Nd,Nd);
+	  FF11.resize(Nd,Nd);
+	  for(int mu=1; mu < Nd; ++mu)
+	  {
+		  for(int nu=0; nu < mu; ++nu)
+		  {
+			  FF00[mu][nu]=(plane_plaq_matrix[mu][nu]-plane_plaq_matrix[nu][mu])/2.0;
+			  FF01[mu][nu]=shift(FF00[mu][nu],BACKWARD,mu);
+			  FF10[mu][nu]=shift(FF00[mu][nu],BACKWARD,nu);
+			  FF11[mu][nu]=shift(FF01[mu][nu],BACKWARD,nu);
+			  FF[mu][nu]=(FF00[mu][nu]+FF01[mu][nu]+FF10[mu][nu]+FF11[mu][nu])/4.0;
+		  }
+	  }
+	  
+	  gluon_o.resize(params.lmax);
+	  multi2d<LatticeColorMatrix> FF_shift;
+	  LatticeColorMatrix u_shift;
+	  u_shift=1;
+	  for(int l=0; l < params.lmax; ++l)
+	  {
+		  gluon_o[l]=0;
+		  for(int mu=0; mu<Nd; ++mu)
+		  {
+			  if(mu != 3)
+			  {
+				  gluon_o[l]+=sum(real(trace(FF[mu][3]*u_shift*FF_shift[mu][3]*adj(u_shift))));
+			  }
+			  for(int nu=0; nu<Nd; ++nu)
+				 if(nu != mu) gluon_o[l]-=sum(real(trace(FF[mu][nu]*u_shift*FF_shift[mu][nu]*adj(u_shift))))/Nd;
+		  }
+		  u_shift=u[2]*shift(u_shift,FORWARD,2);
+	  }
+	  }
+	  
+	  
 	if(Layout::primaryNode())
 	{
 		general_data_base io_ap;
 		sprintf(io_ap.name,"%s",(params.filename+"_ap.iog").c_str());
-		QDPIO::cout << "write file to" << params.filename << std::endl;
+		QDPIO::cout << "write file to" << io_ap.name << std::endl;
 		QDPIO::cout << "max q^2=" << params.max_mom2 << std::endl;
 		io_ap.add_dimension(dim_momentum, mom_serial.size(),mom_serial.data());
 		io_ap.add_dimension(dim_direction, Nd);
@@ -275,8 +336,8 @@ namespace Chroma
 		int data_index=0;
 		for(int m(0);m<mom_serial.size();m++)
 		for(int dir=0; dir< Nd; ++dir)
-		for(int ic2=0; ic2!=Nc; ic2++)
 		for(int ic1=0; ic1!=Nc; ic1++)
+		for(int ic2=0; ic2!=Nc; ic2++)
 		{
 			io_ap.data[data_index]=Ap[m][dir].elem().elem().elem(ic1,ic2).real();
 			data_index++;
@@ -286,9 +347,26 @@ namespace Chroma
 		QDPIO::cout << "writing A(p) to" << io_ap.name << std::endl;
 		io_ap.save();
 		
+		if(params.lmax>=0){
+		general_data_base io_op;
+		sprintf(io_op.name,"%s",(params.filename+"_op.iog").c_str());
+		QDPIO::cout << "write file to" << io_op.name << std::endl;
+		QDPIO::cout << "max link=" << params.lmax << std::endl;
+		io_op.add_dimension(dim_displacement, params.lmax);
+		io_op.initialize();
+		data_index=0;
+		for(int l(0); l<params.lmax; l++)
+		{
+			io_op.data[data_index]=gluon_o[l];
+			data_index++;
+		}
+		QDPIO::cout << "writing file to" << io_prop.name << std::endl;
+		io_prop.save();
+		}
+		
 		general_data_base io_prop;
 		sprintf(io_prop.name,"%s",(params.filename+"_prop.iog").c_str());
-		QDPIO::cout << "write file to" << params.filename << std::endl;
+		QDPIO::cout << "write file to" << io_prop.name << std::endl;
 		QDPIO::cout << "max q^2=" << params.max_mom2 << std::endl;
 		io_prop.add_dimension(dim_momentum, (1+mom_serial.size())/2,mom_serial.data());
 		io_prop.add_dimension(dim_direction, Nd);

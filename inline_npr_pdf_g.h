@@ -36,6 +36,7 @@ namespace Chroma
     unsigned long     frequency;
 
     int max_mom2 ; // max p^2
+	int lmax ;
 //    std::string output_type ;
     std::string filename ;
 
