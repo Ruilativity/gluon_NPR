@@ -291,6 +291,7 @@ namespace Chroma
 	  FF11.resize(Nd,Nd);
 	  for(int mu=1; mu < Nd; ++mu)
 	  {
+		  FF[mu][mu]=0;
 		  for(int nu=0; nu < mu; ++nu)
 		  {
 			  FF00[mu][nu]=(plane_plaq_matrix[mu][nu]-plane_plaq_matrix[nu][mu])/2.0;
@@ -298,13 +299,21 @@ namespace Chroma
 			  FF10[mu][nu]=shift(FF00[mu][nu],BACKWARD,nu);
 			  FF11[mu][nu]=shift(FF01[mu][nu],BACKWARD,nu);
 			  FF[mu][nu]=(FF00[mu][nu]+FF01[mu][nu]+FF10[mu][nu]+FF11[mu][nu])/4.0;
+			  FF[nu][nu]=0;
 		  }
 	  }
 	  
 	  gluon_o.resize(params.lmax);
 	  multi2d<LatticeColorMatrix> FF_shift;
+	  FF_shift.resize(Nd,Nd);
+	  LatticeColorMatrix tmp;
 	  LatticeColorMatrix u_shift;
 	  u_shift=1;
+	  for(int mu=0; mu<Nd; ++mu)
+		   for(int nu=0; nu<mu; ++nu)
+		   {
+			  FF_shift[mu][nu]=FF[mu][nu];
+		   }
 	  for(int l=0; l < params.lmax; ++l)
 	  {
 		  gluon_o[l]=0;
@@ -317,7 +326,15 @@ namespace Chroma
 			  for(int nu=0; nu<Nd; ++nu)
 				 if(nu != mu) gluon_o[l]-=sum(real(trace(FF[mu][nu]*u_shift*FF_shift[mu][nu]*adj(u_shift))))/Nd;
 		  }
-		  u_shift=u[2]*shift(u_shift,FORWARD,2);
+		  
+		  for(int mu=0;mu<Nd;++mu)
+			  for(int nu=0; nu<mu; ++nu){
+				  tmp=shift(FF_shift[mu][nu],FORWARD,zdir);
+				  FF_shift[mu][nu]=tmp;
+			  }
+		  if(l>0) tmp=u[zdir]*shift(u_shift,FORWARD,zdir);
+		  else tmp=u[zdir];
+		  u_shift=tmp;
 	  }
 	  }
 	  
@@ -357,11 +374,11 @@ namespace Chroma
 		data_index=0;
 		for(int l(0); l<params.lmax; l++)
 		{
-			io_op.data[data_index]=gluon_o[l];
+			io_op.data[data_index]=gluon_o[l].elem().elem().elem().elem();
 			data_index++;
 		}
-		QDPIO::cout << "writing file to" << io_prop.name << std::endl;
-		io_prop.save();
+		QDPIO::cout << "writing file to" << io_op.name << std::endl;
+		io_op.save();
 		}
 		
 		general_data_base io_prop;
