@@ -329,11 +329,11 @@ namespace Chroma
 		  
 		  for(int mu=0;mu<Nd;++mu)
 			  for(int nu=0; nu<mu; ++nu){
-				  tmp=shift(FF_shift[mu][nu],FORWARD,zdir);
+				  tmp=shift(FF_shift[mu][nu],FORWARD,2);
 				  FF_shift[mu][nu]=tmp;
 			  }
-		  if(l>0) tmp=u[zdir]*shift(u_shift,FORWARD,zdir);
-		  else tmp=u[zdir];
+		  if(l>0) tmp=u[2]*shift(u_shift,FORWARD,2);
+		  else tmp=u[2];
 		  u_shift=tmp;
 	  }
 	  }
