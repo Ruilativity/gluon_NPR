@@ -270,7 +270,9 @@ namespace Chroma
       multi2d<Double> plane_plaq;
 	  MesPlq(u, w_plaq, s_plaq, t_plaq, plane_plaq, link);
 	  multi2d<LatticeColorMatrix> plane_plaq_matrix;
-	  multi1d<Double> gluon_o;
+	  multi1d<Double> gluon_o,gluon_o1,gluon_o2;
+	  multi2d<Double> gluon_o3_t,gluon_o4_t;
+	  multi1d<LatticeReal> gluon_o3,gluon_o4;
 	  
 	  if(params.lmax>=0){
 	  plane_plaq_matrix.resize(Nd,Nd);
@@ -303,7 +305,13 @@ namespace Chroma
 		  }
 	  }
 	  
-	  gluon_o.resize(params.lmax);
+	  gluon_o1.resize(params.lmax);
+	  gluon_o2.resize(params.lmax);
+	  gluon_o3.resize(params.lmax);
+	  gluon_o4.resize(params.lmax);
+
+	  gluon_o3_t.resize(Layout::lattSize()[3],params.lmax);
+	  gluon_o4_t.resize(Layout::lattSize()[3],params.lmax);
 	  multi2d<LatticeColorMatrix> FF_shift;
 	  FF_shift.resize(Nd,Nd);
 	  LatticeColorMatrix tmp;
@@ -316,17 +324,19 @@ namespace Chroma
 		   }
 	  for(int l=0; l < params.lmax; ++l)
 	  {
-		  gluon_o[l]=0;
+		  gluon_o[l]=0;gluon_o1[l]=0;gluon_o2[l]=0;gluon_o3[l]=0;gluon_o4[l]=0;
 		  for(int mu=0; mu<Nd; ++mu)
 		  {
 			  if(mu != 3)
 			  {
-				  gluon_o[l]+=sum(real(trace(FF[mu][3]*u_shift*FF_shift[mu][3]*adj(u_shift))));
+				  gluon_o3[l]+=real(trace(FF[mu][3]*u_shift*FF_shift[mu][3]*adj(u_shift)))
 			  }
 			  for(int nu=0; nu<Nd; ++nu)
-				 if(nu != mu) gluon_o[l]-=sum(real(trace(FF[mu][nu]*u_shift*FF_shift[mu][nu]*adj(u_shift))))/Nd;
+				 if(nu != mu) gluon_o4[l]+=real(trace(FF[mu][nu]*u_shift*FF_shift[mu][nu]*adj(u_shift)))/Nd;
 		  }
-		  
+		  gluon_o1[l]=sum(gluon_o3[l]);
+		  gluon_o2[l]=sum(gluon_o4[l]);
+		  gluon_o[l]=gluon_o1[l]-gluon_o2[l];
 		  for(int mu=0;mu<Nd;++mu)
 			  for(int nu=0; nu<mu; ++nu){
 				  tmp=shift(FF_shift[mu][nu],FORWARD,2);
@@ -335,7 +345,30 @@ namespace Chroma
 		  if(l>0) tmp=u[2]*shift(u_shift,FORWARD,2);
 		  else tmp=u[2];
 		  u_shift=tmp;
+		  
+		  multi1d<int> coord;
+		  coord.resize(4);
+		  for(int i=0; i<Layout::lattSize()[0];++i)
+				  for(int j=0; j<Layout::lattSize()[1];++j)
+						  for(int k=0; k<Layout::lattSize()[2];++k)
+						  for(int t=0; t<Layout::lattSize()[3];++t){
+			  coord[0]=i;
+			  coord[1]=j;
+			  coord[2]=k;
+			  coord[3]=t;
+			  gluon_o3_t[t][l]+=peekSite(gluon_o3,coord);
+			  gluon_o4_t[t][l]+=peekSite(gluon_o3,coord);
+		  }
 	  }
+		  std::string out_fname_c("data_test_op.dat");
+		  TextFileWriter fout(out_fname_c);
+		  fout << "#t z O_tt O_mumu/4 O_tt-O_mumu/4" << "\n";
+		  for(int l=0; l < lmax; ++l)
+		  for(int t=0; t<Layout::lattSize()[3];++t)
+		  {
+				  fout <<t<<"\t"<<l<<"\t"<< gluon_o3_t[t][l]<<"\t"<< gluon_o4_t[t][l]<<"\t"<< gluon_o3_t[t][l]-gluon_o4_t[t][l]<< "\n";
+		  }
+		  fout.close();
 	  }
 	  
 	  
@@ -369,12 +402,23 @@ namespace Chroma
 		sprintf(io_op.name,"%s",(params.filename+"_op.iog").c_str());
 		QDPIO::cout << "write file to" << io_op.name << std::endl;
 		QDPIO::cout << "max link=" << params.lmax << std::endl;
+		io_op.add_dimension(dim_operator, 3);
 		io_op.add_dimension(dim_displacement, params.lmax);
 		io_op.initialize();
 		data_index=0;
 		for(int l(0); l<params.lmax; l++)
 		{
 			io_op.data[data_index]=gluon_o[l].elem().elem().elem().elem();
+			data_index++;
+		}
+		for(int l(0); l<params.lmax; l++)
+		{
+			io_op.data[data_index]=gluon_o1[l].elem().elem().elem().elem();
+			data_index++;
+		}
+		for(int l(0); l<params.lmax; l++)
+		{
+			io_op.data[data_index]=gluon_o2[l].elem().elem().elem().elem();
 			data_index++;
 		}
 		QDPIO::cout << "writing file to" << io_op.name << std::endl;
