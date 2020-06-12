@@ -269,20 +269,29 @@ namespace Chroma
 	  Double w_plaq, s_plaq, t_plaq, link;
       multi2d<Double> plane_plaq;
 	  MesPlq(u, w_plaq, s_plaq, t_plaq, plane_plaq, link);
-	  multi2d<LatticeColorMatrix> plane_plaq_matrix;
-	  multi1d<Double> gluon_o,gluon_o1,gluon_o2;
-	  multi2d<Double> gluon_o3_t,gluon_o4_t;
-	  multi1d<LatticeReal> gluon_o3,gluon_o4;
-	  
+                multi2d<LatticeColorMatrix> plane_plaq_matrix_1,plane_plaq_matrix_2,plane_plaq_matrix_3,plane_plaq_matrix_4;
+
+                plane_plaq_matrix_1.resize(Nd,Nd);
+                plane_plaq_matrix_2.resize(Nd,Nd);
+                plane_plaq_matrix_3.resize(Nd,Nd);
+                plane_plaq_matrix_4.resize(Nd,Nd);
+	  multi1d<Real> gluon_o,gluon_o1,gluon_o2;
+	  multi3d<Complex> gluon_o_all;
+          multi1d<LatticeReal> gluon_o3, gluon_o4;
 	  if(params.lmax>=0){
-	  plane_plaq_matrix.resize(Nd,Nd);
 	  
 	  for(int mu=1; mu < Nd; ++mu)
 	  {
 		  for(int nu=0; nu < mu; ++nu)
 		  {
-			  plane_plaq_matrix[mu][nu]=u[mu]*shift(u[nu],FORWARD,mu)*adj(shift(u[mu],FORWARD,nu))*adj(u[nu]);
-			  plane_plaq_matrix[nu][mu]=adj(plane_plaq_matrix[mu][nu]);
+                                plane_plaq_matrix_1[mu][nu]=u[mu]*shift(u[nu],FORWARD,mu)*adj(shift(u[mu],FORWARD,nu))*adj(u[nu]);  
+                                plane_plaq_matrix_1[nu][mu]=adj(plane_plaq_matrix_1[mu][nu]);
+                                plane_plaq_matrix_2[mu][nu]=u[nu]*adj(shift(shift(u[mu],BACKWARD,mu),FORWARD,nu))*adj(shift(u[nu],BACKWARD,mu))*shift(u[mu],BACKWARD,mu);
+                                plane_plaq_matrix_2[nu][mu]=adj(plane_plaq_matrix_2[mu][nu]);
+                                plane_plaq_matrix_3[mu][nu]=adj(shift(u[mu],BACKWARD,mu))*adj(shift(shift(u[nu],BACKWARD,mu),BACKWARD,nu))*shift(shift(u[mu],BACKWARD,mu),BACKWARD,nu)*shift(u[nu],BACKWARD,nu);
+                                plane_plaq_matrix_3[nu][mu]=adj(plane_plaq_matrix_3[mu][nu]);
+                                plane_plaq_matrix_4[mu][nu]=adj(shift(u[nu],BACKWARD,nu))*shift(u[mu],BACKWARD,nu)*shift(shift(u[nu],BACKWARD,nu),FORWARD,mu)*adj(u[mu]);
+                                plane_plaq_matrix_4[nu][mu]=adj(plane_plaq_matrix_4[mu][nu]);
 		  }
 	  }
 	  multi2d<LatticeColorMatrix> FF,FF00,FF01,FF10,FF11;
@@ -296,22 +305,25 @@ namespace Chroma
 		  FF[mu][mu]=0;
 		  for(int nu=0; nu < mu; ++nu)
 		  {
-			  FF00[mu][nu]=(plane_plaq_matrix[mu][nu]-plane_plaq_matrix[nu][mu])/2.0;
-			  FF01[mu][nu]=shift(FF00[mu][nu],BACKWARD,mu);
-			  FF10[mu][nu]=shift(FF00[mu][nu],BACKWARD,nu);
-			  FF11[mu][nu]=shift(FF01[mu][nu],BACKWARD,nu);
-			  FF[mu][nu]=(FF00[mu][nu]+FF01[mu][nu]+FF10[mu][nu]+FF11[mu][nu])/4.0;
-			  FF[nu][nu]=0;
+                                QDPIO::cout << "mu,nu=" << mu << nu << std::endl;
+                                FF00[mu][nu]=(plane_plaq_matrix_1[mu][nu]-plane_plaq_matrix_1[nu][mu])/2.0;
+                                FF01[mu][nu]=(plane_plaq_matrix_2[mu][nu]-plane_plaq_matrix_2[nu][mu])/2.0;
+                                FF10[mu][nu]=(plane_plaq_matrix_3[mu][nu]-plane_plaq_matrix_3[nu][mu])/2.0;
+                                FF11[mu][nu]=(plane_plaq_matrix_4[mu][nu]-plane_plaq_matrix_4[nu][mu])/2.0;
+
+                                FF[mu][nu]=(FF00[mu][nu]+FF01[mu][nu]+FF10[mu][nu]+FF11[mu][nu])/4.0;
+                                FF[nu][mu]=-FF[mu][nu];
+                                FF[mu][mu]=0;
+                                FF[nu][nu]=0;
 		  }
 	  }
-	  
-	  gluon_o1.resize(params.lmax);
-	  gluon_o2.resize(params.lmax);
-	  gluon_o3.resize(params.lmax);
-	  gluon_o4.resize(params.lmax);
-
-	  gluon_o3_t.resize(Layout::lattSize()[3],params.lmax);
-	  gluon_o4_t.resize(Layout::lattSize()[3],params.lmax);
+	  gluon_o.resize(params.lmax+1);
+	  gluon_o1.resize(params.lmax+1);
+	  gluon_o2.resize(params.lmax+1);
+          gluon_o3.resize(params.lmax+1);
+          gluon_o4.resize(params.lmax+1);
+          gluon_o_all.resize(params.lmax+1,Nd,Nd);
+	  gluon_o_all=0;
 	  multi2d<LatticeColorMatrix> FF_shift;
 	  FF_shift.resize(Nd,Nd);
 	  LatticeColorMatrix tmp;
@@ -321,18 +333,21 @@ namespace Chroma
 		   for(int nu=0; nu<mu; ++nu)
 		   {
 			  FF_shift[mu][nu]=FF[mu][nu];
+			FF_shift[nu][mu]=FF[nu][mu];
 		   }
-	  for(int l=0; l < params.lmax; ++l)
+	  for(int l=0; l <= params.lmax; ++l)
 	  {
 		  gluon_o[l]=0;gluon_o1[l]=0;gluon_o2[l]=0;gluon_o3[l]=0;gluon_o4[l]=0;
 		  for(int mu=0; mu<Nd; ++mu)
 		  {
 			  if(mu != 3)
 			  {
-				  gluon_o3[l]+=real(trace(FF[mu][3]*u_shift*FF_shift[mu][3]*adj(u_shift)))
+				  gluon_o3[l]+=real(trace(FF[mu][3]*u_shift*FF_shift[mu][3]*adj(u_shift)));
 			  }
-			  for(int nu=0; nu<Nd; ++nu)
+			  for(int nu=0; nu<Nd; ++nu){
 				 if(nu != mu) gluon_o4[l]+=real(trace(FF[mu][nu]*u_shift*FF_shift[mu][nu]*adj(u_shift)))/Nd;
+			gluon_o_all[l][mu][nu]=sum(trace(FF[mu][nu]*u_shift*FF_shift[mu][nu]*adj(u_shift)));
+			  }
 		  }
 		  gluon_o1[l]=sum(gluon_o3[l]);
 		  gluon_o2[l]=sum(gluon_o4[l]);
@@ -341,37 +356,16 @@ namespace Chroma
 			  for(int nu=0; nu<mu; ++nu){
 				  tmp=shift(FF_shift[mu][nu],FORWARD,2);
 				  FF_shift[mu][nu]=tmp;
+				  FF_shift[nu][mu]=-FF_shift[mu][nu];
 			  }
 		  if(l>0) tmp=u[2]*shift(u_shift,FORWARD,2);
 		  else tmp=u[2];
 		  u_shift=tmp;
 		  
-		  multi1d<int> coord;
-		  coord.resize(4);
-		  for(int i=0; i<Layout::lattSize()[0];++i)
-				  for(int j=0; j<Layout::lattSize()[1];++j)
-						  for(int k=0; k<Layout::lattSize()[2];++k)
-						  for(int t=0; t<Layout::lattSize()[3];++t){
-			  coord[0]=i;
-			  coord[1]=j;
-			  coord[2]=k;
-			  coord[3]=t;
-			  gluon_o3_t[t][l]+=peekSite(gluon_o3,coord);
-			  gluon_o4_t[t][l]+=peekSite(gluon_o3,coord);
 		  }
 	  }
-		  std::string out_fname_c("data_test_op.dat");
-		  TextFileWriter fout(out_fname_c);
-		  fout << "#t z O_tt O_mumu/4 O_tt-O_mumu/4" << "\n";
-		  for(int l=0; l < lmax; ++l)
-		  for(int t=0; t<Layout::lattSize()[3];++t)
-		  {
-				  fout <<t<<"\t"<<l<<"\t"<< gluon_o3_t[t][l]<<"\t"<< gluon_o4_t[t][l]<<"\t"<< gluon_o3_t[t][l]-gluon_o4_t[t][l]<< "\n";
-		  }
-		  fout.close();
-	  }
 	  
-	  
+	 QDPIO::cout <<gluon_o_all[0][0][3]<< std::endl; 
 	if(Layout::primaryNode())
 	{
 		general_data_base io_ap;
@@ -396,34 +390,50 @@ namespace Chroma
 		}
 		QDPIO::cout << "writing A(p) to" << io_ap.name << std::endl;
 		io_ap.save();
-		
+
+/*		
 		if(params.lmax>=0){
 		general_data_base io_op;
 		sprintf(io_op.name,"%s",(params.filename+"_op.iog").c_str());
 		QDPIO::cout << "write file to" << io_op.name << std::endl;
 		QDPIO::cout << "max link=" << params.lmax << std::endl;
-		io_op.add_dimension(dim_operator, 3);
-		io_op.add_dimension(dim_displacement, params.lmax);
+		io_op.add_dimension(dim_displacement, params.lmax+1);
 		io_op.initialize();
 		data_index=0;
-		for(int l(0); l<params.lmax; l++)
+		for(int l(0); l<=params.lmax; l++)
 		{
 			io_op.data[data_index]=gluon_o[l].elem().elem().elem().elem();
-			data_index++;
-		}
-		for(int l(0); l<params.lmax; l++)
-		{
-			io_op.data[data_index]=gluon_o1[l].elem().elem().elem().elem();
-			data_index++;
-		}
-		for(int l(0); l<params.lmax; l++)
-		{
-			io_op.data[data_index]=gluon_o2[l].elem().elem().elem().elem();
 			data_index++;
 		}
 		QDPIO::cout << "writing file to" << io_op.name << std::endl;
 		io_op.save();
 		}
+*/
+                if(params.lmax>=0){
+                general_data_base io_op;
+                sprintf(io_op.name,"%s",(params.filename+"_op.iog").c_str());
+                QDPIO::cout << "write file to" << io_op.name << std::endl;
+                QDPIO::cout << "max link=" << params.lmax << std::endl;
+                io_op.add_dimension(dim_displacement, params.lmax+1);
+                io_op.add_dimension(dim_row, Nd);
+                io_op.add_dimension(dim_column, Nd);
+                io_op.add_dimension(dim_complex, 2);
+                io_op.initialize();
+                data_index=0;
+                for(int l(0); l<=params.lmax; l++)
+                {
+			for(int mu=0;mu<Nd;++mu)
+                          for(int nu=0; nu<Nd; ++nu){
+                        	io_op.data[data_index]=gluon_o_all[l][mu][nu].elem().elem().elem().real();
+                                data_index++;
+				io_op.data[data_index]=gluon_o_all[l][mu][nu].elem().elem().elem().imag();
+                        	data_index++;
+			}
+                }
+                QDPIO::cout << "writing file to" << io_op.name << std::endl;
+                io_op.save();
+                }
+
 		
 		general_data_base io_prop;
 		sprintf(io_prop.name,"%s",(params.filename+"_prop.iog").c_str());
