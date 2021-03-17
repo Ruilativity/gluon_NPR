@@ -3,7 +3,7 @@
  *
  * Propagator calculations
  */
-
+#include <fftw3.h>
 #include "fermact.h"
 #include "meas/inline/abs_inline_measurement_factory.h"
 #include "meas/glue/mesplq.h"
@@ -246,7 +246,224 @@ template <typemane T> multi4d<T> fast_FT(multi4d<T> to_FT, int sign_flag) // sig
 	}
 	return FT_result;
 }
+
+//convert the lattice color matrix to fftw arrays, waiting for FT.
+multi1d<fftw_complex*> lattice_color_matrix_to_fftw_array(LatticeColorMatrix ai_x){
+	multi1d<multi1d<Complex>> color_array(Nc*Nc);
+	multi1d<fftw_complex*> color_fftw_array(Nc*Nc);
+	int color_index=0;
+	for(int i=0;i<Nc;i++){
+		for(int j=0;j<Nc;j++){
+			color_array[color_index].resize(Layout::vol());
+			QDP_extract(color_array[color_index],peekColor(ai_x,i,j),all); // order: x(fastest),y,z,t(slowest)
+			color_fftw_array[color_index] = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * Layout::vol());
+			for(int k=0;k<color_array[color_index].size();k++){
+				color_fftw_array[color_index][k][0]=color_array[color_index][k].real();
+				color_fftw_array[color_index][k][1]=color_array[color_index][k].imag();
+			}
+			color_index++;
+		}
+	}
+	return color_fftw_array;
+}
+//convert the array of lattice complex to fftw arrays, waiting for FT.
+multi1d<fftw_complex*> lattice_complex_to_fftw_array(multi1d<LatticeComplex> op){
+	multi1d<multi1d<Complex>> op_array;
+	multi1d<fftw_complex*> op_fftw_array;
+	for(int i=0;i<op_array.size();i++){
+		op_array[i].resize(Layout::vol());
+		QDP_extract(op_array[i],op[i],all); // order: x(fastest),y,z,t(slowest)
+		op_fftw_array[i] = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * Layout::vol());
+		for(int k=0;k<op_array[i].size();k++){
+			op_fftw_array[i][k][0]=op_array[i][k].real();
+			op_fftw_array[i][k][1]=op_array[i][k].imag();
+		}
+	}
+	return op_fftw_array;
+}
+//convert the lattice complex to fftw arrays, waiting for FT.
+fftw_complex* lattice_complex_to_fftw_array(LatticeComplex op){
+	multi1d<Complex> op_array;
+	fftw_complex* op_fftw_array;
+	op_array.resize(Layout::vol());
+	QDP_extract(op_array,op,all); // order: x(fastest),y,z,t(slowest)
+	op_fftw_array = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * Layout::vol());
+	for(int k=0;k<op_array.size();k++){
+		op_fftw_array[k][0]=op_array[k].real();
+		op_fftw_array[k][1]=op_array[k].imag();
+	}
+	return op_fftw_array;
+}
+
+// FT (sign=1) or inverse FT (sign=-1), replace the input array with its FT. (normalize the data with 1/V after inverse FT)
+void fftw_transformation(multi1d<fftw_complex*> color_fftw_in_array, int sign, bool norm_flag){
+	multi1d<fftw_complex*> color_fftw_out_array(color_fftw_in_array.size());
+	for(int i=0;i<color_fftw_in_array.size();i++){
+		color_fftw_out_array[i] = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * Layout::vol());
+	}
+	int sizes[Nd];
+	for(int i=0;i<Nd;i++) sizes[i]=Layout::lattSize()[i]; // order: x(fastest),y,z,t(slowest)
+	for(int i=0;i<color_fftw_in_array.size();i++){
+		fftw_plan p=fftw_plan_dft(Nd, sizes, color_fftw_in_array[i], color_fftw_out_array[i],
+								sign, FFTW_MEASURE);
+		fftw_execute(p);
+		if(norm_flag) for(int j=0;j<sizeof(color_fftw_in_array[i]);j++) color_fftw_in_array[i]/=Layout::vol();
+	}
+	return color_fftw_out_array;
+}
+// FT (sign=1) or inverse FT (sign=-1), replace the input array with its FT. (normalize the data with 1/V after inverse FT)
+void fftw_transformation(fftw_complex* scalar_fftw_in_array, int sign, bool norm_flag){
+	fftw_complex* scalar_fftw_out_array;
+	color_fftw_out_array = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * Layout::vol());
+	int sizes[Nd];
+	for(int i=0;i<Nd;i++) sizes[i]=Layout::lattSize()[i]; // order: x(fastest),y,z,t(slowest)
+	fftw_plan p=fftw_plan_dft(Nd, sizes, scalar_fftw_in_array, scalar_fftw_out_array,
+							sign, FFTW_MEASURE);
+	fftw_execute(p);
+	if(norm_flag) for(int j=0;j<sizeof(color_fftw_in_array);j++) color_fftw_in_array/=Layout::vol();
+	return scalar_fftw_out_array;
+}
+
+
+/* CDER for LaMET operator.
+	input: l links of the operator (lattice Complex), gauge field (4 direction lattice color matrix), p*4 momentum sets, r1 (A to O), r2 (A to A).
+	output: l links * p momentums of the operator (Complex)
+ */
+multi1d<multi1d<Complex>> CDER_combination(multi1d<LatticeComplex> gluon_op_x, multi1d<LatticeColorMatrix> ai_x, multi1d<multi1d<int>> mom_sets, int r1, int r2){
+	LatticeReal filter_r1, filter_r2;
+	LatticeBoolean mask = false;
+	//create filter |x|<r1: f(x)=\theta(r1-|x|)
+	mask = (pow(Layout::latticeCoordinate(0),2)+pow(Layout::latticeCoordinate(1),2)+pow(Layout::latticeCoordinate(2),2)+pow(Layout::latticeCoordinate(3),2)) <= pow(r1,2);
+	filter_r1=where(mask, 1.0, 0.0);
+
+	//create filter |x|<r2: g(x)=\theta(r2-|x|)
+	mask = (pow(Layout::latticeCoordinate(0),2)+pow(Layout::latticeCoordinate(1),2)+pow(Layout::latticeCoordinate(2),2)+pow(Layout::latticeCoordinate(3),2)) <= pow(r2,2);
+	filter_r2=where(mask, 1.0, 0.0);
+	
+	//FT filter_r1 f(p)
+	fftw_complex* filter_r1_fftw_x, filter_r1_fftw_p;
+	filter_r1_fftw_x=lattice_complex_to_fftw_array(filter_r1);
+	filter_r1_fftw_p=fftw_transformation(filter_r1_fftw_x, 1, false);
+	
+	//FT lamet operator O(p)
+	multi1d<fftw_complex*> gluon_op_fftw_x, gluon_op_fftw_p;
+	gluon_op_fftw_x = lattice_complex_to_fftw_array(gluon_op_x);
+	gluon_op_fftw_p = fftw_transformation(gluon_op_fftw_x, 1, false);
+	
+	//multiply the two arrays, then inverse ft to coordinate space. \tilde{O}(x)=F[O(p)f(p)]
+	multi1d<fftw_complex*> gluon_op_filtered_fftw_x(gluon_op_fftw_x.size()), gluon_op_filtered_fftw_p(gluon_op_fftw_x.size());
+	
+	for(int i=0; i < gluon_op_fftw_x.size();i++){
+		gluon_op_filtered_fftw_x[i]= (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * Layout::vol());
+		for(int j=0; j< sizeof(filter_r1_fftw_x); j++){
+			gluon_op_filtered_fftw_p[i][j][0]=gluon_op_fftw_p[i][j][0]*filter_r1_fftw_p[j][0]-gluon_op_fftw_p[i][j][1]*filter_r1_fftw_p[j][1];
+			gluon_op_filtered_fftw_p[i][j][1]=gluon_op_fftw_p[i][j][0]*filter_r1_fftw_p[j][1]+gluon_op_fftw_p[i][j][1]*filter_r1_fftw_p[j][0];
+		}
+	}
+	gluon_op_filtered_fftw_x=fftw_transformation(gluon_op_filtered_fftw_p, -1, true);
+	
+	
+	//Convert gauge field A_\mu(x) to fftw array
+	multi1d<multi1d<fftw_complex*>> ai_fftw_x(Nd), ai_fftw_p(Nd);
+	for(int mu=0;mu<Nd;i++){
+		ai_fftw_x[mu]=lattice_complex_to_fftw_array(ai_x[mu]);
+		ai_fftw_p[mu]=fftw_transformation(ai_x[mu], 1, false);
+	}
+	
+	/*
+	 multiply the operator with gauge filed, then inverse ft to coordinate space. B(x)=\tilde{O}(x)A(x)
+	 Dimensions: link length, spacetime direction of gauge filed, color index
+	 */
+	multi1d<multi1d<multi1d<fftw_complex*>>> gluon_op_filtered_ai_fftw_x(gluon_op_filtered_fftw_x.size()) gluon_op_filtered_ai_fftw_p(gluon_op_filtered_fftw_x.size());
+	for(int i=0;i<gluon_op_filtered_fftw_x.size();i++){
+		gluon_op_filtered_ai_fftw_x[i].resize(Nd);
+		gluon_op_filtered_ai_fftw_p[i].resize(Nd);
+		for(int j=0;j<Nd;j++){
+			gluon_op_filtered_ai_fftw_x[i][j].resize(Nc*Nc);
+			for(int k=0;k<Nc*Nc;k++){
+				gluon_op_filtered_ai_fftw_x[i][j][k]=(fftw_complex*) fftw_malloc(sizeof(fftw_complex) * Layout::vol());
+				for(int site=0;site<Layout::vol();site++){
+					gluon_op_filtered_ai_fftw_x[i][j][k][size][0]=gluon_op_filtered_fftw_x[i][size][0]*ai_fftw_x[j][k][size][0]-gluon_op_filtered_fftw_x[i][size][1]*ai_fftw_x[j][k][size][1];
+					gluon_op_filtered_ai_fftw_x[i][j][k][size][1]=gluon_op_filtered_fftw_x[i][size][0]*ai_fftw_x[j][k][size][1]+gluon_op_filtered_fftw_x[i][size][1]*ai_fftw_x[j][k][size][0];
+				}
+			}
+			gluon_op_filtered_ai_fftw_p[i][j]=fftw_transformation(gluon_op_filtered_ai_fftw_x[i][j],1,false);
+		}
+	}
+	
+	
+	
+	
+	
+
+}
+
+
+//factorize one dimension and rearrange the coordinates for FFT.
+std::vector<int> factorize(int length, std::vector<int> &index_list){
+	int i=2;
+	for(;i<=sqrt(length);i++){
+		if(length%i ==0) {
+			index_list.push_back(i);
+			return factorize(length/i,index_list);
+		}
+	}
+	if(i<= length)index_list.push_back(length);
+	return index_list;
+}
 			
+multi1d<int> re_arange(int length){
+	multi1d<int> new_order;
+	multi1d<int> tmp_order;
+	new_order.resize(1);
+	new_order=0;
+	std::vector<int> factorization;
+	factorization=factorize(length,factorization);
+	for(int i=0;i<factorization.size();i++){
+		length/=factorization[i];
+		tmp_order=new_order;
+		for(int j=1;j<factorization[i];j++)
+			new_order=concat(new_order, tmp_order + (j-1)*length);
+	}
+	return new_order;
+}
+
+//fold 1-d array to multi-dimensional array
+
+template <typemane T> multi1d<multi1d<T>> fold_1d(multi1d<T> to_fold, int degeneration){
+	multi1d<multi1d<T>> folded;
+	folded.resize(degeneration);
+	int sub_len;
+	if(to_fold.size()%degeneration != 0){
+		QDPIO::cerr << InlineGluonNprPDFEnv::name << ": folding arrays of incorrect shape."
+				<< std::endl;
+		QDP_abort(1);
+	}
+	sublen=to_fold.size()/degeneration;
+	int index=0;
+	for(int i=0;i<degeneration;i++){
+		folded[i].resize(sublen);
+		for (int j=0; j<sublen;j++){
+			folded[i][j]=to_fold[index];
+			index++;
+		}
+	}
+	return folded;
+}
+
+
+//FFT with arrangement for arrays, The data structure should be a multi1d array, can be nested.
+
+/* not completed.
+template <typemane T> multi1d<T> fast_FT_rearrange(multi1d<T> to_FT, int sign_flag) // sign_flag=1 for FT, -1 for inverse FT
+{
+	const Real twopi = 6.283185307179586476925286;
+	multi1d<int> new_order=rearange(to_FT.size());
+	
+	return FT_result;
+}
+*/
+
 
   // Function call
   void
