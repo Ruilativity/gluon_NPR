@@ -324,6 +324,24 @@ void fftw_transformation(fftw_complex* scalar_fftw_in_array, int sign, bool norm
 	return scalar_fftw_out_array;
 }
 
+// Contract two color matrices in multi1d<fftw*> array form.
+fftw_complex* color_contraction(multi1d<fftw_complex*> color_fftw_array_1, multi1d<fftw_complex*> color_fftw_array_2){
+	fftw_complex* result_fftw_array;
+	result_fftw_array = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * Layout::vol());
+	for(int site=0;site<Layout::vol();site++){
+		result_fftw_array[site][0]=0;
+		result_fftw_array[site][1]=0;
+		for(int i=0;i<Nc;i++){
+			for(int j=0;j<Nc;j++){
+				result_fftw_array[site][0] += color_fftw_array_1[i*Nc+j][0]*color_fftw_array_2[j*Nc+i][0] - color_fftw_array_1[i*Nc+j][1]*color_fftw_array_2[j*Nc+i][1];
+				result_fftw_array[site][1] += color_fftw_array_1[i*Nc+j][0]*color_fftw_array_2[j*Nc+i][1] + color_fftw_array_1[i*Nc+j][1]*color_fftw_array_2[j*Nc+i][0];
+			}
+		}
+	}
+	
+	return result_fftw_array;
+}
+
 
 /* CDER for LaMET operator.
 	input: l links of the operator (lattice Complex), gauge field (4 direction lattice color matrix), p*4 momentum sets, r1 (A to O), r2 (A to A).
@@ -343,7 +361,7 @@ multi1d<multi1d<Complex>> CDER_combination(multi1d<LatticeComplex> gluon_op_x, m
 	//FT filter_r1 f(p)
 	fftw_complex* filter_r1_fftw_x, filter_r1_fftw_p;
 	filter_r1_fftw_x=lattice_complex_to_fftw_array(filter_r1);
-	filter_r1_fftw_p=fftw_transformation(filter_r1_fftw_x, 1, false);
+	filter_r1_fftw_p=fftw_transformation(filter_r1_fftw_x, -1, false);
 	
 	//FT lamet operator O(p)
 	multi1d<fftw_complex*> gluon_op_fftw_x, gluon_op_fftw_p;
@@ -363,7 +381,7 @@ multi1d<multi1d<Complex>> CDER_combination(multi1d<LatticeComplex> gluon_op_x, m
 	gluon_op_filtered_fftw_x=fftw_transformation(gluon_op_filtered_fftw_p, -1, true);
 	
 	
-	//Convert gauge field A_\mu(x) to fftw array
+	//Convert gauge field A_\mu(x) to fftw array, ft to A(p).
 	multi1d<multi1d<fftw_complex*>> ai_fftw_x(Nd), ai_fftw_p(Nd);
 	for(int mu=0;mu<Nd;i++){
 		ai_fftw_x[mu]=lattice_complex_to_fftw_array(ai_x[mu]);
@@ -371,13 +389,11 @@ multi1d<multi1d<Complex>> CDER_combination(multi1d<LatticeComplex> gluon_op_x, m
 	}
 	
 	/*
-	 multiply the operator with gauge filed, then inverse ft to coordinate space. B(x)=\tilde{O}(x)A(x)
+	 multiply the operator with gauge filed, then ft to momentum space B(-p). B(x)=\tilde{O}(x)A(x)
 	 Dimensions: link length, spacetime direction of gauge filed, color index
 	 */
-	multi1d<multi1d<multi1d<fftw_complex*>>> gluon_op_filtered_ai_fftw_x(gluon_op_filtered_fftw_x.size()) gluon_op_filtered_ai_fftw_p(gluon_op_filtered_fftw_x.size());
+	multi2d<multi1d<fftw_complex*>> gluon_op_filtered_ai_fftw_x(gluon_op_filtered_fftw_x.size(),Nd) gluon_op_filtered_ai_fftw_p(gluon_op_filtered_fftw_x.size());
 	for(int i=0;i<gluon_op_filtered_fftw_x.size();i++){
-		gluon_op_filtered_ai_fftw_x[i].resize(Nd);
-		gluon_op_filtered_ai_fftw_p[i].resize(Nd);
 		for(int j=0;j<Nd;j++){
 			gluon_op_filtered_ai_fftw_x[i][j].resize(Nc*Nc);
 			for(int k=0;k<Nc*Nc;k++){
@@ -387,12 +403,19 @@ multi1d<multi1d<Complex>> CDER_combination(multi1d<LatticeComplex> gluon_op_x, m
 					gluon_op_filtered_ai_fftw_x[i][j][k][size][1]=gluon_op_filtered_fftw_x[i][size][0]*ai_fftw_x[j][k][size][1]+gluon_op_filtered_fftw_x[i][size][1]*ai_fftw_x[j][k][size][0];
 				}
 			}
-			gluon_op_filtered_ai_fftw_p[i][j]=fftw_transformation(gluon_op_filtered_ai_fftw_x[i][j],1,false);
+			gluon_op_filtered_ai_fftw_p[i][j]=fftw_transformation(gluon_op_filtered_ai_fftw_x[i][j],-1,false);
 		}
 	}
 	
-	
-	
+	//Contract B(-p) with A(p), take trace; Dimension: link length, spacetime direction, spacetime direction.
+	multi3d<fftw_complex*> gluon_op_filtered_ai_ai_trace_fftw_p(gluon_op_filtered_fftw_x.size(),Nd,Nd);
+	for(int i=0;i<gluon_op_filtered_fftw_x.size();i++){
+		for(int j=0;j<Nd;j++){
+			for(int k=0;k<Nd;k++){
+				gluon_op_filtered_ai_ai_trace_fftw_p[i][j][k]=color_contraction(gluon_op_filtered_ai_fftw_p[i][j],ai_fftw_p[k]);
+			}
+		}
+	}
 	
 	
 
